@@ -1,9 +1,17 @@
+import httpx
+import pytest
 from ahmatta.main import app
-from fastapi.testclient import TestClient
 
 
-def test_health_returns_ok() -> None:
-    response = TestClient(app).get("/api/health")
+@pytest.mark.anyio
+async def test_health_returns_ok() -> None:
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as client:
+        response = await client.get("/api/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

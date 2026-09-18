@@ -11,7 +11,8 @@
 
 ## Local development
 
-Python 3.12 이상, [uv](https://docs.astral.sh/uv/), Node.js 22.12 이상과 npm이 필요합니다.
+Python 3.12 이상, [uv](https://docs.astral.sh/uv/), Node.js 22.22.2 이상(22.x),
+24.15.0 이상(24.x), 또는 26 이상과 npm이 필요합니다.
 
 ```bash
 uv sync --group dev
