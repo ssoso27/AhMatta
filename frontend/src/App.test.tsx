@@ -1,11 +1,10 @@
 import { render, screen } from "@testing-library/react";
-
 import { App } from "./App";
 
-test("shows the product purpose", () => {
+afterEach(() => vi.unstubAllGlobals());
+test("loads the working screen through the real app and API client", async () => {
+    vi.stubGlobal("fetch", async () => Response.json({ active_task: null, interrupted: [], todo: [] }));
     render(<App />);
-
-    expect(
-        screen.getByRole("heading", { name: "지금 뭐 하고 있었지?" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("region", { name: "지금 하는 일" })).toHaveTextContent("지금 하는 일 없음");
+    expect(screen.getByRole("textbox", { name: "새 작업" })).toBeVisible();
 });

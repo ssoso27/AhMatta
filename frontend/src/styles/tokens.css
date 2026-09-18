@@ -1,0 +1,24 @@
+:root {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    color: #242b35;
+    background: #f6f5f1;
+    font-size: var(--font-body);
+    line-height: var(--line-height);
+    --font-body: 16px;
+    --font-title: 18px;
+    --font-secondary: 14px;
+    --line-height: 1.5;
+    --action-height: 44px;
+    --surface: #fffefa;
+    --ink: #242b35;
+    --secondary: #626873;
+    --line: #d9dcd9;
+    --accent: #285b9d;
+    --accent-hover: #204c84;
+    --active: #eef3fa;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+}
