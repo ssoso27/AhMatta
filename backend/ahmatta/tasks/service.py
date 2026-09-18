@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Select, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ahmatta.tasks.models import (
@@ -19,6 +20,16 @@ class TaskNotFoundError(LookupError):
     def __init__(self, task_id: int) -> None:
         super().__init__(task_id)
         self.task_id = task_id
+
+
+class FocusInvariantError(RuntimeError):
+    pass
+
+
+class RequestIdConflictError(ValueError):
+    def __init__(self, request_id: str) -> None:
+        super().__init__(f"request_id already used for another command: {request_id}")
+        self.request_id = request_id
 
 
 class TaskService:
@@ -77,7 +88,12 @@ class TaskService:
                 )
             )
 
-        return self._run_command(request_id, "start_task", transition)
+        return self._run_command(
+            request_id,
+            "start_task",
+            self._command_fingerprint("start_task", task_id=task_id),
+            transition,
+        )
 
     def pause_active(self, now: datetime, request_id: str) -> FocusResult:
         utc_now = self._to_utc(now)
@@ -91,7 +107,12 @@ class TaskService:
             active.interrupted_at = utc_now
             active.updated_at = utc_now
 
-        return self._run_command(request_id, "pause_active", transition)
+        return self._run_command(
+            request_id,
+            "pause_active",
+            self._command_fingerprint("pause_active"),
+            transition,
+        )
 
     def complete_task(
         self,
@@ -108,7 +129,12 @@ class TaskService:
             task.status = TaskStatus.DONE
             task.updated_at = utc_now
 
-        return self._run_command(request_id, "complete_task", transition)
+        return self._run_command(
+            request_id,
+            "complete_task",
+            self._command_fingerprint("complete_task", task_id=task_id),
+            transition,
+        )
 
     def list_focus(self) -> FocusSnapshot:
         active = self._active_task()
@@ -147,6 +173,7 @@ class TaskService:
         self,
         request_id: str,
         command_name: str,
+        command_fingerprint: str,
         transition: Callable[[], None],
     ) -> FocusResult:
         processed = self._session.scalar(
@@ -155,7 +182,7 @@ class TaskService:
             )
         )
         if processed is not None:
-            return self._restore_result(processed.result_reference)
+            return self._processed_result(processed, command_fingerprint)
 
         try:
             transition()
@@ -165,14 +192,45 @@ class TaskService:
                 ProcessedCommand(
                     request_id=request_id,
                     command_name=command_name,
+                    command_fingerprint=command_fingerprint,
                     result_reference=self._result_reference(result),
                 )
             )
             self._session.commit()
+        except IntegrityError:
+            self._session.rollback()
+            winner = self._session.scalar(
+                select(ProcessedCommand).where(
+                    ProcessedCommand.request_id == request_id
+                )
+            )
+            if winner is None:
+                raise
+            return self._processed_result(winner, command_fingerprint)
         except Exception:
             self._session.rollback()
             raise
         return result
+
+    def _processed_result(
+        self,
+        processed: ProcessedCommand,
+        command_fingerprint: str,
+    ) -> FocusResult:
+        if processed.command_fingerprint != command_fingerprint:
+            raise RequestIdConflictError(processed.request_id)
+        return self._restore_result(processed.result_reference)
+
+    @staticmethod
+    def _command_fingerprint(
+        command_name: str,
+        *,
+        task_id: int | None = None,
+    ) -> str:
+        payload: dict[str, str | int] = {"command": command_name}
+        if task_id is not None:
+            payload["task_id"] = task_id
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
 
     def _focus_result(self) -> FocusResult:
         snapshot = self.list_focus()
@@ -245,7 +303,10 @@ class TaskService:
         statement: Select[tuple[Task]] = (
             select(Task).where(Task.status == TaskStatus.ACTIVE).order_by(Task.id)
         )
-        return self._session.scalars(statement).first()
+        active_tasks = self._session.scalars(statement).all()
+        if len(active_tasks) > 1:
+            raise FocusInvariantError("multiple active tasks found")
+        return active_tasks[0] if active_tasks else None
 
     def _get_task(self, task_id: int) -> Task:
         task = self._session.get(Task, task_id)

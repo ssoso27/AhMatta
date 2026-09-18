@@ -5,19 +5,34 @@ import pytest
 from ahmatta.db import Base
 from ahmatta.tasks.service import TaskService
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 
 @pytest.fixture
-def task_service(tmp_path_factory: pytest.TempPathFactory) -> Iterator[TaskService]:
+def session_factory(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[sessionmaker[Session]]:
     database_path = tmp_path_factory.mktemp("task-domain") / "test.db"
     engine = create_engine(f"sqlite:///{database_path}")
     Base.metadata.create_all(engine)
+    factory = sessionmaker(engine)
 
-    with Session(engine) as session:
-        yield TaskService(session)
+    yield factory
 
     engine.dispose()
+
+
+@pytest.fixture
+def db_session(
+    session_factory: sessionmaker[Session],
+) -> Iterator[Session]:
+    with session_factory() as session:
+        yield session
+
+
+@pytest.fixture
+def task_service(db_session: Session) -> TaskService:
+    return TaskService(db_session)
 
 
 @pytest.fixture

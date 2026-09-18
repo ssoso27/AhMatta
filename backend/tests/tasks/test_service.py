@@ -1,9 +1,17 @@
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import pytest
-from ahmatta.tasks.models import TaskStatus
-from ahmatta.tasks.service import TaskService
+from ahmatta.tasks.models import ProcessedCommand, TaskStatus, WorkSession
+from ahmatta.tasks.service import (
+    FocusInvariantError,
+    RequestIdConflictError,
+    TaskService,
+)
+from sqlalchemy import event, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, sessionmaker
 
 
 def test_create_task_persists_optional_request_context(
@@ -178,3 +186,135 @@ def test_retry_after_later_switch_returns_persisted_original_result(
     assert task_service.open_sessions_count() == 1
     assert len(task_service.sessions_for(first_task.id)) == 1
     assert len(task_service.sessions_for(later_task.id)) == 1
+
+
+def test_database_rejects_a_second_open_work_session(
+    task_service: TaskService,
+    db_session: Session,
+    utc: Callable[[int, int], datetime],
+) -> None:
+    first = task_service.create_task("첫 작업")
+    second = task_service.create_task("둘째 작업")
+    db_session.add(
+        WorkSession(task_id=first.id, started_at=utc(17, 0))
+    )
+    db_session.commit()
+    db_session.add(WorkSession(task_id=second.id, started_at=utc(17, 5)))
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+    db_session.rollback()
+    assert task_service.open_sessions_count() == 1
+
+
+def test_focus_listing_rejects_multiple_active_tasks(
+    task_service: TaskService,
+    db_session: Session,
+) -> None:
+    first = task_service.create_task("첫 active")
+    second = task_service.create_task("둘째 active")
+    first.status = TaskStatus.ACTIVE
+    second.status = TaskStatus.ACTIVE
+    db_session.commit()
+
+    with pytest.raises(FocusInvariantError, match="multiple active tasks"):
+        task_service.list_focus()
+
+
+def test_seoul_aware_time_is_loaded_as_utc(
+    task_service: TaskService,
+    db_session: Session,
+) -> None:
+    task = task_service.create_task("시간대 확인")
+    seoul_time = datetime(
+        2026,
+        9,
+        18,
+        9,
+        30,
+        tzinfo=ZoneInfo("Asia/Seoul"),
+    )
+
+    task_service.start_task(task.id, seoul_time, "seoul-time")
+    db_session.expire_all()
+
+    stored = task_service.sessions_for(task.id)[0].started_at
+    assert stored == datetime(2026, 9, 18, 0, 30, tzinfo=UTC)
+    assert stored.tzinfo is UTC
+
+
+def test_request_id_reuse_for_another_task_is_rejected(
+    task_service: TaskService,
+    utc: Callable[[int, int], datetime],
+) -> None:
+    first = task_service.create_task("첫 대상")
+    second = task_service.create_task("다른 대상")
+    task_service.start_task(first.id, utc(18, 0), "reused-request")
+
+    with pytest.raises(RequestIdConflictError, match="request_id"):
+        task_service.start_task(second.id, utc(18, 5), "reused-request")
+
+    snapshot = task_service.list_focus()
+    assert snapshot.active_task is not None
+    assert snapshot.active_task.id == first.id
+    assert task_service.sessions_for(second.id) == []
+    assert task_service.open_sessions_count() == 1
+
+
+def test_request_id_reuse_for_another_command_is_rejected(
+    task_service: TaskService,
+    utc: Callable[[int, int], datetime],
+) -> None:
+    task = task_service.create_task("명령 충돌")
+    task_service.start_task(task.id, utc(19, 0), "cross-command")
+
+    with pytest.raises(RequestIdConflictError, match="request_id"):
+        task_service.pause_active(utc(19, 5), "cross-command")
+
+    snapshot = task_service.list_focus()
+    assert snapshot.active_task is not None
+    assert snapshot.active_task.id == task.id
+    assert task_service.sessions_for(task.id)[0].ended_at is None
+
+
+def test_unique_request_race_returns_the_persisted_winner(
+    session_factory: sessionmaker[Session],
+    utc: Callable[[int, int], datetime],
+) -> None:
+    winning_results = []
+    with session_factory() as losing_session, session_factory() as winning_session:
+        loser = TaskService(losing_session)
+        winner = TaskService(winning_session)
+
+        def commit_winner(
+            session: Session,
+            _flush_context: object,
+            _instances: object,
+        ) -> None:
+            if not any(
+                isinstance(item, ProcessedCommand) for item in session.new
+            ):
+                return
+            winning_results.append(
+                winner.pause_active(utc(20, 0), "simultaneous-request")
+            )
+
+        event.listen(losing_session, "before_flush", commit_winner)
+        try:
+            losing_result = loser.pause_active(
+                utc(20, 0),
+                "simultaneous-request",
+            )
+        finally:
+            event.remove(losing_session, "before_flush", commit_winner)
+
+    assert len(winning_results) == 1
+    assert losing_result == winning_results[0]
+    with session_factory() as verification_session:
+        command_count = verification_session.scalar(
+            select(func.count())
+            .select_from(ProcessedCommand)
+            .where(ProcessedCommand.request_id == "simultaneous-request")
+        )
+    assert command_count == 1

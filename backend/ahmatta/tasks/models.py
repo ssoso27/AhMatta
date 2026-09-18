@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, literal_column
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -72,6 +72,15 @@ class WorkSession(Base):
 
     task: Mapped[Task] = relationship(back_populates="sessions")
 
+    __table_args__ = (
+        Index(
+            "uq_work_sessions_single_open",
+            literal_column("1"),
+            unique=True,
+            sqlite_where=ended_at.is_(None),
+        ),
+    )
+
 
 class ProcessedCommand(Base):
     __tablename__ = "processed_commands"
@@ -79,5 +88,6 @@ class ProcessedCommand(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     request_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     command_name: Mapped[str] = mapped_column(String(100))
+    command_fingerprint: Mapped[str] = mapped_column(Text)
     result_reference: Mapped[str] = mapped_column(Text)
     processed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=utc_now)
