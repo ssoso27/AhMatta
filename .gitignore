@@ -1,0 +1,27 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# JavaScript
+node_modules/
+dist/
+coverage/
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Local data
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
