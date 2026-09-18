@@ -25,3 +25,6 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# Isolated feature workspaces
+.worktrees/
