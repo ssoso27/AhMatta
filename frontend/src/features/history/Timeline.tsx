@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { DailyHistory } from "./types";
 
 export function Timeline({ history }: { history: DailyHistory }) {
@@ -9,7 +10,7 @@ export function Timeline({ history }: { history: DailyHistory }) {
             {history.rows.map(row => <div key={row.task_id} className="timeline-name" title={row.title}><span>{row.title}</span></div>)}
         </div>
         <div className="timeline-scroll" tabIndex={0} aria-label="시간축 가로 스크롤">
-            <div className="timeline-tracks">
+            <div className="timeline-tracks" style={{ "--timeline-tick-spacing": `${120 / minutes * 100}%` } as CSSProperties}>
                 <div className="timeline-axis">{ticks.map(minute => <span key={minute} style={{ left: `${minute / minutes * 100}%` }}>
                     {clock.format(new Date(Date.parse(history.day_start) + minute * 60000))}
                 </span>)}</div>

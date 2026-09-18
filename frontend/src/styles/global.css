@@ -81,7 +81,7 @@ main { flex: 1; min-width: 0; }
 .timeline-tracks { min-width: 960px; }
 .timeline-axis { height: 36px; position: relative; font-size: var(--font-secondary); color: var(--secondary); }
 .timeline-axis span { position: absolute; padding-left: 4px; }
-.timeline-track { position: relative; background: repeating-linear-gradient(to right, transparent, transparent calc(100% / 12 - 1px), var(--line) calc(100% / 12 - 1px), var(--line) calc(100% / 12)); }
+.timeline-track { position: relative; background-image: linear-gradient(to right, transparent calc(100% - 1px), var(--line) calc(100% - 1px)); background-size: var(--timeline-tick-spacing) 100%; }
 .timeline-bar { position: absolute; top: 24px; height: 24px; min-width: 2px; background: var(--accent); border-radius: 4px; }
 .history-copy { display: grid; gap: 12px; padding: 16px 0 24px; border-top: 1px solid var(--line); }
 .history-copy button { justify-self: start; }

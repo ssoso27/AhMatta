@@ -102,3 +102,48 @@
 - [글자 대비](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html), [200% 확대](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html), [텍스트 간격 변경](https://www.w3.org/WAI/WCAG21/Understanding/text-spacing)
 
 W3C 인지 접근성 문서는 보완 지침이며, 이 문서 자체가 WCAG 준수나 개인별 사용성을 보장하지 않는다.
+
+## 2026-09-18 · 핵심 웹 브라우저 검증
+
+macOS ARM64의 Playwright Chromium 153에서 실제 FastAPI와 테스트별 임시 SQLite DB를
+연결해 확인했다. 서버 응답이나 클립보드를 가짜 구현으로 바꾸지 않았다.
+
+- A→B→C 후 A·B가 중단 목록에 남음, A 재개, 멈춤, 완료, 새로고침 뒤 B·C 유지,
+  A의 세 구간 표시, 날짜별 기록과 실제 클립보드 복사가 통과했다.
+- 400×760과 360×760에서 긴 한글 제목, 현재 작업·중단 작업·빈 화면·기록 화면을 확인했다.
+  문서 전체의 가로 넘침이 없고 주요 버튼은 스크롤 후 클릭할 수 있다.
+  시간축만 가로로 넘치며 포커스 후 오른쪽 화살표로 이동할 수 있다.
+- Chromium 확장의 `chrome.tabs.setZoom(2)`로 실제 200% 브라우저 확대를 적용했다.
+  확대율 2, CSS 화면 너비 400→200, DPR 1→2를 확인했다. 긴 제목 펼치기와
+  멈춤·완료 버튼에 스크롤로 접근하며 완료할 수 있다. CSS `zoom`이나 좁은 viewport만으로
+  확대를 대신하지 않았다.
+- Tab·Enter로 등록, 시작, 전환, 재개, 완료를 수행했다. 해당 포커스가 화면 안에 있고
+  `:focus-visible` 윤곽선이 2px 이상 표시되는지 검사했다.
+- 360px에서 줄 간격 1.5, 글자 간격 0.12em, 단어 간격 0.16em, 문단 아래 간격 2em을
+  적용한 뒤 펼친 제목의 세로 잘림, 문서 가로 넘침, 완료 버튼 접근을 검사했다.
+  이는 스트레스 검사이며 한글 기본 자간 선호로 채택한 값이 아니다.
+- axe 4.13의 WCAG 2 A/AA, 2.1 A/AA, 2.2 AA 태그로 빈 화면·현재 작업·중단 작업·기록
+  네 상태의 전체 페이지를 검사했고 자동으로 판정된 위반은 0건이었다. 대비 검사도 포함한다.
+  axe의 수동 확인 필요 결과는 HTML 보고서의 JSON 첨부에 남긴다.
+- 시간표 배경 간격은 해당 날짜의 길이에 맞췄다. 뉴욕 DST 23시간·25시간 날짜의
+  2시간 눈금 간격은 단위 테스트로, 배경 간격의 실제 CSS 적용은 브라우저로 검사했다.
+
+스크린샷은 저장소 루트의 아래 경로에 생성된다. Git에는 넣지 않는다.
+
+- `output/playwright/empty-400.png`, `empty-360.png`
+- `output/playwright/current-400.png`, `current-360.png`
+- `output/playwright/interrupted-400.png`, `interrupted-360.png`
+- `output/playwright/history-400.png`, `history-360.png`
+- `output/playwright/current-zoom-200.png` — 확대한 화면에서 현재 제목과 행동까지 스크롤한 뷰포트
+- `output/playwright/keyboard-focus.png`, `text-spacing-360.png`
+- `output/playwright/report/index.html` — 테스트 결과와 axe JSON 첨부
+
+현재·중단·기록·확대 스크린샷은 에이전트가 실제 이미지를 열어 확인했다.
+짧은 실제 작업 구간이라 기록의 합계는 0초로 보일 수 있으며 막대는 최소 너비로 표시된다.
+스크린샷의 시간과 날짜는 실행 시각에 따라 달라진다.
+
+사용자의 읽기 편안함과 3초 내 파악은 **사용자 피드백 전 미검증**이다. 자동 검사와 에이전트의
+화면 확인은 사용자 검증이나 WCAG 준수 인증이 아니다. Safari·Firefox·화면 낭독기·OS 확대,
+회색조 식별, 실제 원문 링크의 키보드 열기, Slack 요청 20개와 답장 상태는 이번 범위에서
+검증하지 않았다. DST 날짜를 UI에서 직접 선택하는 브라우저 검증도 별도이며, 현재 화면은
+Asia/Seoul을 사용한다. 초기 시각 값과 화면 구조는 유지한다.
