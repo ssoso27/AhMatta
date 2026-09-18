@@ -11,6 +11,7 @@ from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from ahmatta.db import Base
+from ahmatta.history.router import create_history_router
 from ahmatta.settings import settings
 from ahmatta.tasks.router import Clock, create_task_router
 
@@ -43,6 +44,7 @@ def create_app(
 
     application = FastAPI(lifespan=lifespan)
     application.include_router(create_task_router(session_factory, clock))
+    application.include_router(create_history_router(session_factory, clock))
 
     @application.get("/api/health")
     def health() -> dict[str, str]:

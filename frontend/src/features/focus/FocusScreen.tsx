@@ -12,7 +12,7 @@ export function FocusScreen({ api = focusApi }: { api?: FocusApi }) {
     const focus = useFocus(api);
     const input = useRef<HTMLInputElement>(null);
     const disabled = focus.busy || focus.loading;
-    return <div className="app-shell">
+    return <div className="focus-screen">
         <header className="app-header"><h1>아맞다<span>지금</span></h1>
             <button className="text-button" disabled={disabled} onClick={focus.refresh}>새로고침</button></header>
         <main>
@@ -31,8 +31,5 @@ export function FocusScreen({ api = focusApi }: { api?: FocusApi }) {
                 <TaskList title="할 일" tasks={focus.snapshot.todo} disabled={disabled} onStart={focus.start} />
             </>}
         </main>
-        <nav className="bottom-nav" aria-label="주 메뉴">
-            <a href="#" aria-current="page">지금</a><button disabled title="기록 화면 준비 중">기록</button><button disabled title="설정 화면 준비 중">설정</button>
-        </nav>
     </div>;
 }
