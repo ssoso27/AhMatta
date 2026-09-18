@@ -35,3 +35,6 @@ data/
 
 # Agent execution scratch files
 .superpowers/
+
+.playwright-cli/
+output/playwright/

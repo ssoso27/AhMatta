@@ -11,10 +11,13 @@ export class FakeFocusApi implements FocusApi {
     failStart = false;
     loseStartResponse = false;
     private tasks: Task[];
-    private commands = new Map<string, string>();
+    private commands = new Map<string, { command: string; response: FocusSnapshot }>();
     constructor(tasks: Task[] = []) { this.tasks = structuredClone(tasks); }
     async getFocus(): Promise<FocusSnapshot> {
         if (this.failRead) throw new Error("offline");
+        return this.snapshot();
+    }
+    private snapshot(): FocusSnapshot {
         const active = this.tasks.find(t => t.status === "active");
         return structuredClone({ active_task: active ? { ...active, elapsed_seconds: 1380 } as ActiveTask : null,
             interrupted: this.tasks.filter(t => t.status === "interrupted"), todo: this.tasks.filter(t => t.status === "todo") });
@@ -25,28 +28,32 @@ export class FakeFocusApi implements FocusApi {
         this.tasks.push(created);
         return structuredClone(created);
     }
-    private repeated(id: string, command: string) {
+    private process(id: string, command: string, apply: () => void): FocusSnapshot {
         if (!id) throw new Error("missing request ID");
         const previous = this.commands.get(id);
-        if (previous && previous !== command) throw new Error("request ID conflict");
-        if (previous) return true;
-        this.commands.set(id, command);
-        return false;
+        if (previous && previous.command !== command) throw new Error("request ID conflict");
+        if (previous) return structuredClone(previous.response);
+        apply();
+        const response = this.snapshot();
+        this.commands.set(id, { command, response });
+        return structuredClone(response);
     }
     async startTask(id: number, requestId: string) {
         if (this.failStart) throw new Error("offline");
-        if (!this.repeated(requestId, `start:${id}`)) {
+        const response = this.process(requestId, `start:${id}`, () => {
             this.tasks = this.tasks.map(t => t.id === id ? { ...t, status: "active" } : t.status === "active" ? { ...t, status: "interrupted" } : t);
-        }
+        });
         if (this.loseStartResponse) { this.loseStartResponse = false; throw new Error("lost response"); }
-        return this.getFocus();
+        return response;
     }
     async pauseFocus(requestId: string) {
-        if (!this.repeated(requestId, "pause")) this.tasks = this.tasks.map(t => t.status === "active" ? { ...t, status: "interrupted" } : t);
-        return this.getFocus();
+        return this.process(requestId, "pause", () => {
+            this.tasks = this.tasks.map(t => t.status === "active" ? { ...t, status: "interrupted" } : t);
+        });
     }
     async completeTask(id: number, requestId: string) {
-        if (!this.repeated(requestId, `complete:${id}`)) this.tasks = this.tasks.map(t => t.id === id ? { ...t, status: "done" } : t);
-        return this.getFocus();
+        return this.process(requestId, `complete:${id}`, () => {
+            this.tasks = this.tasks.map(t => t.id === id ? { ...t, status: "done" } : t);
+        });
     }
 }

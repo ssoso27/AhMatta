@@ -138,3 +138,74 @@ test("task details reveal the complete title and safe original link separately f
     expect(screen.getByRole("link", { name: "원문 열기" })).toHaveAttribute("href", "https://example.com/thread");
     expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
 });
+
+test("read recovery after successful refresh never replays an earlier failed start", async () => {
+    const user = userEvent.setup();
+    const api = new FakeFocusApi([task(1, "A")]);
+    render(<FocusScreen api={api} />);
+    api.failStart = true;
+    await user.click(await screen.findByRole("button", { name: "A 시작" }));
+    expect(await screen.findByRole("alert")).toBeVisible();
+    api.failStart = false;
+    await user.click(screen.getByRole("button", { name: "새로고침" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    api.failRead = true;
+    await user.click(screen.getByRole("button", { name: "새로고침" }));
+    const recovery = within(await screen.findByRole("alert")).getByRole("button");
+    api.failRead = false;
+    await user.click(recovery);
+    expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
+    expect(screen.getByRole("button", { name: "A 시작" })).toBeVisible();
+});
+
+test("read failure after successful start recovers authoritative state after another device pauses", async () => {
+    const user = userEvent.setup();
+    const api = new FakeFocusApi([task(1, "A")]);
+    render(<FocusScreen api={api} />);
+    const start = await screen.findByRole("button", { name: "A 시작" });
+    api.failRead = true;
+    await user.click(start);
+    expect(await screen.findByRole("alert")).toHaveTextContent("저장했지만 목록을 불러오지 못했어요");
+    expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
+    await api.pauseFocus("other-device-pause");
+    api.failRead = false;
+    await user.click(screen.getByRole("button", { name: "다시 불러오기" }));
+    expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
+    expect(screen.getByRole("button", { name: "A 이어 하기" })).toBeVisible();
+});
+
+test("independent refresh preserves a known-created task for add-and-start recovery", async () => {
+    const user = userEvent.setup();
+    const api = new FakeFocusApi();
+    render(<FocusScreen api={api} />);
+    await screen.findByText("지금 하는 일 없음");
+    api.failStart = true;
+    await user.type(screen.getByRole("textbox", { name: "새 작업" }), "투표 확인");
+    await user.click(screen.getByRole("button", { name: "추가하고 시작" }));
+    expect(await screen.findByRole("button", { name: "투표 확인 시작" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "새로고침" }));
+    api.failStart = false;
+    await user.click(screen.getByRole("button", { name: "추가하고 시작" }));
+    expect(region("지금 하는 일")).toHaveTextContent("투표 확인");
+    expect(region("할 일")).not.toHaveTextContent("투표 확인");
+    expect(screen.getByRole("textbox", { name: "새 작업" })).toHaveValue("");
+});
+
+test("historical command replay stays invisible until a fresh authoritative read succeeds", async () => {
+    const user = userEvent.setup();
+    const api = new FakeFocusApi([task(1, "A")]);
+    render(<FocusScreen api={api} />);
+    const start = await screen.findByRole("button", { name: "A 시작" });
+    api.loseStartResponse = true;
+    api.failRead = true;
+    await user.click(start);
+    expect(await screen.findByRole("alert")).toBeVisible();
+    await api.pauseFocus("other-device-pause");
+    await user.click(screen.getByRole("button", { name: "다시 시도" }));
+    expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
+    expect(screen.queryByRole("button", { name: "잠시 멈추기" })).not.toBeInTheDocument();
+    api.failRead = false;
+    await user.click(screen.getByRole("button", { name: "다시 불러오기" }));
+    expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
+    expect(screen.getByRole("button", { name: "A 이어 하기" })).toBeVisible();
+});
