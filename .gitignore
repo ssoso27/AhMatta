@@ -8,9 +8,13 @@
 node_modules/
 dist/
 coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/
 
 # Python
 .venv/
+.uv-cache/
 __pycache__/
 .pytest_cache/
 *.py[cod]
@@ -28,3 +32,6 @@ data/
 
 # Isolated feature workspaces
 .worktrees/
+
+# Agent execution scratch files
+.superpowers/
