@@ -72,9 +72,18 @@ export function useFocus(api: FocusApi) {
         }
     }
 
-    function command(execute: (requestId: string) => Promise<unknown>) {
+    function command(execute: (requestId: string) => Promise<unknown>, taskId?: number) {
         const requestId = crypto.randomUUID();
-        return run({ execute: () => execute(requestId), retryable: true, saved: false });
+        return run({
+            execute: () => execute(requestId),
+            retryable: true,
+            saved: false,
+            onSuccess: () => {
+                if (taskId !== undefined && pendingAdd.current?.created?.id === taskId) {
+                    pendingAdd.current = null;
+                }
+            },
+        });
     }
 
     function add(start: boolean) {
@@ -103,8 +112,8 @@ export function useFocus(api: FocusApi) {
 
     return { snapshot, loading, busy, error, title, setTitle, add, refresh,
         retry: retryOperation ? () => run(retryOperation) : undefined,
-        start: (id: number) => command(requestId => api.startTask(id, requestId)),
-        pause: () => command(requestId => api.pauseFocus(requestId)),
-        complete: (id: number) => command(requestId => api.completeTask(id, requestId)),
+        start: (id: number) => command(requestId => api.startTask(id, requestId), id),
+        pause: () => command(requestId => api.pauseFocus(requestId), snapshot?.active_task?.id),
+        complete: (id: number) => command(requestId => api.completeTask(id, requestId), id),
     };
 }

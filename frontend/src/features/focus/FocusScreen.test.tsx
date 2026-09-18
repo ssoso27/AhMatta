@@ -209,3 +209,31 @@ test("historical command replay stays invisible until a fresh authoritative read
     expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
     expect(screen.getByRole("button", { name: "A 이어 하기" })).toBeVisible();
 });
+
+test.each(["추가", "추가하고 시작"])("%s creates new work after visible task controls resolve a failed add-and-start", async (submit) => {
+    const user = userEvent.setup();
+    const api = new FakeFocusApi();
+    render(<FocusScreen api={api} />);
+    await screen.findByText("지금 하는 일 없음");
+    api.failStart = true;
+    await user.type(screen.getByRole("textbox", { name: "새 작업" }), "A 작업");
+    await user.click(screen.getByRole("button", { name: "추가하고 시작" }));
+    const start = await screen.findByRole("button", { name: "A 작업 시작" });
+    api.failStart = false;
+    await user.click(start);
+    expect(region("지금 하는 일")).toHaveTextContent("A 작업");
+    expect(screen.getByRole("textbox", { name: "새 작업" })).toHaveValue("A 작업");
+    await user.click(screen.getByRole("button", { name: "완료" }));
+    expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
+    expect(screen.getByRole("textbox", { name: "새 작업" })).toHaveValue("A 작업");
+    await user.click(screen.getByRole("button", { name: submit }));
+    expect(screen.getByRole("textbox", { name: "새 작업" })).toHaveValue("");
+    if (submit === "추가") {
+        expect(screen.getByRole("button", { name: "A 작업 시작" })).toBeVisible();
+        expect(region("지금 하는 일")).toHaveTextContent("지금 하는 일 없음");
+    } else {
+        await api.completeTask(1, "other-device-completes-original-task");
+        await user.click(screen.getByRole("button", { name: "새로고침" }));
+        expect(region("지금 하는 일")).toHaveTextContent("A 작업");
+    }
+});
